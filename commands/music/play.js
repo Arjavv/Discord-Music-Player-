@@ -350,8 +350,10 @@ module.exports = {
                 throw new Error('Voice connection was not established. The bot did not join the voice channel.');
             }
 
-            if (!player.playing && !player.paused) {
+            if (!player.playing) {
                 player.play();
+            } else if (player.paused) {
+                player.pause(false);
             }
 
             const successTitle = isPlaylist ? t.success.titlePlaylist : t.success.titleTrack;

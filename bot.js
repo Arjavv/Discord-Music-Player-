@@ -313,8 +313,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
 
                 const player = client.riffy.players.get(guild.id);
                 if (player) {
-                    player.queue.clear();
-                    player.stop();
+                    player.pause(true);
                 }
 
                 client.riffy.createConnection({
