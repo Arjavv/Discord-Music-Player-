@@ -286,15 +286,20 @@ function buildMainBody(client, lang, groupedCommands, commandMentionMap) {
   const utilityMeta = getCategoryMeta(lang, 'utility');
   const pingStatus = getPingStatus(ping);
 
+  const overviewList = [
+    `### ${getEmoji('commands')} Overview`,
+    `• Commands: **${totalCommands}**`,
+    `• Servers: **${totalServers}**`,
+    `• Users: **${totalUsers.toLocaleString()}**`,
+    `• Uptime: **${uptime}**`,
+    `• Ping: **${ping}ms** (${pingStatus})`
+  ];
+  if (config.websiteUrl) {
+    overviewList.push(`• Dashboard: [Click Here](${config.websiteUrl})`);
+  }
+
   return [
-    [
-      `### ${getEmoji('commands')} Overview`,
-      `• Commands: **${totalCommands}**`,
-      `• Servers: **${totalServers}**`,
-      `• Users: **${totalUsers.toLocaleString()}**`,
-      `• Uptime: **${uptime}**`,
-      `• Ping: **${ping}ms** (${pingStatus})`
-    ].join('\n'),
+    overviewList.join('\n'),
     [
       `### ${getEmoji('folder')} Categories`,
       `• ${getEmoji('music')} ${musicMeta.name}: **${groupedCommands.music.length}**`,

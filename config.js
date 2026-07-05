@@ -5,6 +5,7 @@ module.exports = {
   language: "en",
   ownerID: ["1038393508718989382", ""], 
   defaultVoiceChannelId: process.env.DEFAULT_VOICE_CHANNEL_ID || "", 
+  websiteUrl: process.env.WEBSITE_URL || "", 
   mongodbUri : "mongodb+srv://shiva:shiva@musicbotyt.ouljywv.mongodb.net/?retryWrites=true&w=majority",
   spotifyClientId : "d92baed9605a45a39ed7c2a2d960b1c1",
   spotifyClientSecret : "e9b29f6739de4315bc03b6d8a8e93b03",
