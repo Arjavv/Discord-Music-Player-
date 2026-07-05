@@ -509,6 +509,21 @@ async function initializePlayer(client) {
         const guildId = player.guildId;
         const trackUri = track.info.uri;
         const requester = requesters.get(trackUri);
+
+        // Send play log to "cmds" or "commands" channel if it exists
+        try {
+            const guild = client.guilds.cache.get(player.guildId);
+            if (guild) {
+                const logsChannel = guild.channels.cache.find(
+                    c => c.isTextBased() && (c.name.toLowerCase() === 'cmds' || c.name.toLowerCase() === 'commands')
+                );
+                if (logsChannel) {
+                    await logsChannel.send(`🎵 **Now Playing:** \`${track.info.title}\` by \`${track.info.author || 'Unknown'}\` | Requested by: \`${requester || 'Unknown'}\``);
+                }
+            }
+        } catch (err) {
+            console.error('Error sending play log to cmds channel:', err);
+        }
         const lang = await getLang(guildId).catch(() => {
             const langSync = getLangSync();
             console.error(`[ PLAYER ] Failed to load language for guild ${guildId}, using default: ${langSync.console ? 'loaded' : 'failed'}`);

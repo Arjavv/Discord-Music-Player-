@@ -9,10 +9,19 @@ const { getLavalinkManager } = require('../../lavalink.js');
 
 const data = new SlashCommandBuilder()
   .setName('playlist')
-  .setDescription('Open the playlist menu')
+  .setDescription('Playlist commands')
   .addSubcommand(sub =>
     sub.setName('menu')
       .setDescription('Open the playlist menu')
+  )
+  .addSubcommand(sub =>
+    sub.setName('play')
+      .setDescription('Play a playlist directly from a link')
+      .addStringOption(option =>
+        option.setName('link')
+          .setDescription('Enter the playlist link (Spotify, YouTube, SoundCloud)')
+          .setRequired(true)
+      )
   );
 
 const PLAYLISTS_PER_PAGE = 10;
@@ -1172,6 +1181,18 @@ module.exports = {
   },
   run: async (client, interaction) => {
     try {
+      const subcommand = interaction.options.getSubcommand(false);
+      if (subcommand === 'play') {
+        const link = interaction.options.getString('link');
+        const playCommand = require('../music/play.js');
+        const originalGetString = interaction.options.getString;
+        interaction.options.getString = (name) => {
+          if (name === 'name') return link;
+          return originalGetString.call(interaction.options, name);
+        };
+        return playCommand.run(client, interaction);
+      }
+
       const deferred = await safeDeferReply(interaction);
       if (!deferred && !interaction.deferred && !interaction.replied) return;
       return showMenu(interaction, await getLang(interaction.guildId));

@@ -273,7 +273,7 @@ function buildRotatingCommandHint(commandMentionMap) {
 }
 
 function buildMainBody(client, lang, groupedCommands, commandMentionMap) {
-  const botName = client.user?.username || 'Prime Music';
+  const botName = client.user?.username || 'SNF PULSE';
   const totalCommands = client.commands.size;
   const totalServers = client.guilds.cache.size;
   const totalUsers = client.guilds.cache.reduce((acc, guild) => acc + (guild.memberCount || 0), 0);
@@ -424,7 +424,7 @@ async function showMainMenu(client, interaction) {
   const commandMentionMap = await getCommandMentionMap(client, interaction);
   const banner = buildHelpBanner();
   const card = buildCard(
-    `${getEmoji('help')} ${client.user?.username || 'Prime Music'} Help Section`,
+    `${getEmoji('help')} ${client.user?.username || 'SNF PULSE'} Help Section`,
     buildMainBody(client, lang, groupedCommands, commandMentionMap),
     [buildTabsRow('overview')],
     banner

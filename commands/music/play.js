@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const config = require('../../config.js');
 const SpotifyWebApi = require('spotify-web-api-node');
-const { getData } = require('spotify-url-info')(require('node-fetch'));
+const { getData, getTracks } = require('spotify-url-info')(require('node-fetch'));
 const { sendErrorResponse, handleCommandError, safeDeferReply, buildPaleCard, sanitizeTitle, stripLeadingIcons } = require('../../utils/responseHandler.js');
 const { checkVoiceChannel: checkVC } = require('../../utils/voiceChannelCheck.js');
 const { getLavalinkManager } = require('../../lavalink.js');
@@ -229,18 +229,43 @@ module.exports = {
 
             let tracksToQueue = [];
             let isPlaylist = false;
+            let resolve;
+            let resolvedNatively = false;
 
-            if (query.includes('spotify.com')) {
+            // 1. Try native resolve first (works for YouTube, SoundCloud, and Spotify if node has plugin)
+            try {
+                resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
+                if (resolve && resolve.tracks && resolve.tracks.length > 0 && resolve.loadType !== 'empty' && resolve.loadType !== 'error') {
+                    resolvedNatively = true;
+                }
+            } catch (err) {
+                console.log('[ SPOTIFY ] Native resolve attempt failed, will fall back if Spotify URL:', err.message);
+            }
+
+            // 2. If not resolved natively and it's a Spotify URL, fall back to custom API / scraper
+            if (!resolvedNatively && query.includes('spotify.com')) {
                 try {
                     const spotifyData = await getData(query);
 
                     if (spotifyData.type === 'track') {
                         const trackName = `${spotifyData.name} - ${spotifyData.artists.map(a => a.name).join(', ')}`;
                         tracksToQueue.push(trackName);
-                    } else if (spotifyData.type === 'playlist') {
+                    } else if (spotifyData.type === 'playlist' || spotifyData.type === 'album' || spotifyData.type === 'artist') {
                         isPlaylist = true;
-                        const playlistId = query.split('/playlist/')[1].split('?')[0]; 
-                        tracksToQueue = await getSpotifyPlaylistTracks(playlistId);
+                        if (spotifyData.type === 'playlist') {
+                            const playlistId = query.split('/playlist/')[1].split('?')[0]; 
+                            tracksToQueue = await getSpotifyPlaylistTracks(playlistId);
+                        }
+                        if (!tracksToQueue || tracksToQueue.length === 0) {
+                            console.log('[ SPOTIFY ] API client credentials failed or empty; trying scraped fallback...');
+                            const scrapedTracks = await getTracks(query);
+                            if (scrapedTracks && scrapedTracks.length > 0) {
+                                tracksToQueue = scrapedTracks.map(t => {
+                                    const artistName = t.artists && Array.isArray(t.artists) ? t.artists.map(a => a.name).join(', ') : (t.artist || 'Unknown Artist');
+                                    return `${t.name} - ${artistName}`;
+                                });
+                            }
+                        }
                     }
                 } catch (err) {
                     console.error('Error fetching Spotify data:', err);
@@ -252,21 +277,12 @@ module.exports = {
                         5000
                     );
                 }
-            } else {
-                let resolve;
-                try {
-                    resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
-                } catch (err) {
-                    const msg = err?.message || '';
-                    if (msg.includes('fetch failed') || msg.includes('No nodes are available') || (err.cause && err.cause.code === 'ECONNREFUSED')) {
-                        await nodeManager.reconnectNodesNow?.(5000).catch(() => {});
-                        await nodeManager.ensureNodeAvailable();
-                        resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
-                    } else {
-                        throw err;
-                    }
-                }
+            }
 
+            // 3. Queue tracks
+            let addedCount = 0;
+
+            if (resolvedNatively) {
                 if (!resolve || typeof resolve !== 'object' || !Array.isArray(resolve.tracks)) {
                     return sendErrorResponse(
                         interaction,
@@ -279,12 +295,14 @@ module.exports = {
 
                 if (resolve.loadType === 'playlist') {
                     isPlaylist = true;
+                    addedCount = resolve.tracks.length;
                     for (const track of resolve.tracks) {
                         track.info.requester = interaction.user.username;
                         player.queue.add(track);
                         requesters.set(track.info.uri, interaction.user.username);
                     }
                 } else if (resolve.loadType === 'search' || resolve.loadType === 'track') {
+                    addedCount = 1;
                     const track = resolve.tracks.shift();
                     track.info.requester = interaction.user.username;
                     player.queue.add(track);
@@ -298,28 +316,33 @@ module.exports = {
                         5000
                     );
                 }
-            }
-
-            let queuedTracks = 0;
-
-            const maxTracks = 200;
-            for (let i = 0; i < Math.min(tracksToQueue.length, maxTracks); i++) {
-                const trackQuery = tracksToQueue[i];
-                try {
-                    const resolve = await client.riffy.resolve({ query: trackQuery, requester: interaction.user.username });
-                    if (resolve && resolve.tracks && resolve.tracks.length > 0) {
-                        const trackInfo = resolve.tracks[0];
-                        player.queue.add(trackInfo);
-                        requesters.set(trackInfo.info.uri, interaction.user.username);
-                        queuedTracks++;
+            } else if (tracksToQueue.length > 0) {
+                const maxTracks = 200;
+                for (let i = 0; i < Math.min(tracksToQueue.length, maxTracks); i++) {
+                    const trackQuery = tracksToQueue[i];
+                    try {
+                        const trackResolve = await client.riffy.resolve({ query: trackQuery, requester: interaction.user.username });
+                        if (trackResolve && trackResolve.tracks && trackResolve.tracks.length > 0) {
+                            const trackInfo = trackResolve.tracks[0];
+                            player.queue.add(trackInfo);
+                            requesters.set(trackInfo.info.uri, interaction.user.username);
+                            addedCount++;
+                        }
+                    } catch (error) {
+                        console.error(`Error resolving track ${trackQuery}:`, error);
                     }
-                } catch (error) {
-                    console.error(`Error resolving track ${trackQuery}:`, error);
                 }
-            }
-            
-            if (tracksToQueue.length > maxTracks) {
-                console.warn(`Playlist truncated: ${tracksToQueue.length} tracks requested, only ${maxTracks} queued`);
+                if (tracksToQueue.length > maxTracks) {
+                    console.warn(`Playlist truncated: ${tracksToQueue.length} tracks requested, only ${maxTracks} queued`);
+                }
+            } else {
+                return sendErrorResponse(
+                    interaction,
+                    t.noResults.title + '\n\n' +
+                    t.noResults.message + '\n' +
+                    t.noResults.note,
+                    5000
+                );
             }
 
             const connected = await waitForPlayerConnection(player);
@@ -341,7 +364,7 @@ module.exports = {
                 [
                     `### ${addedIcon} Added` + '\n' +
                     (isPlaylist
-                        ? t.success.playlistAdded.replace('{count}', queuedTracks)
+                        ? t.success.playlistAdded.replace('{count}', addedCount)
                         : t.success.trackAdded),
                     `### ${statusIcon} Status` + '\n' +
                     statusText

@@ -2,7 +2,7 @@
 
 ![Logo](https://i.ibb.co/GfTxbJfC/7-edited.png)
 
-# 🎵 PrimeMusic - Advanced Lavalink Music Bot - 1.5.1
+# 🎵 SNF PULSE - Advanced Lavalink Music Bot - 1.5.1
 
 ![Version](https://img.shields.io/badge/version-1.5.1-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -79,8 +79,8 @@
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/GlaceYT/PrimeMusic-Lavalink.git
-cd PrimeMusic-Lavalink
+git clone https://github.com/GlaceYT/SNF PULSE-Lavalink.git
+cd SNF PULSE-Lavalink
 ```
 
 ### 2. Install Dependencies
@@ -255,7 +255,7 @@ This bot is optimized for low-memory hosting environments:
 ## 📁 Project Structure
 
 ```
-PrimeMusic-Lavalink/
+SNF PULSE-Lavalink/
 ├── commands/          # Bot commands
 │   ├── basic/         # Basic commands (help, ping, stats)
 │   ├── music/         # Music commands (play, pause, skip)
@@ -303,7 +303,7 @@ PrimeMusic-Lavalink/
 ## 🤝 Support
 
 - **Discord Server**: [Join Support Server](https://discord.gg/xQF9f9yUEM)
-- **Issues**: [GitHub Issues](https://github.com/GlaceYT/PrimeMusic-Lavalink/issues)
+- **Issues**: [GitHub Issues](https://github.com/GlaceYT/SNF PULSE-Lavalink/issues)
 - **Author**: GlaceYT
 
 ---

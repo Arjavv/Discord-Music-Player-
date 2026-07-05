@@ -69,7 +69,7 @@ module.exports = {
                 footer: "**Select a category below to view detailed commands.**"
             },
             footer: {
-                version: "**Version 1.4** • Prime Music Bot",
+                version: "**Version 1.4** • SNF PULSE Bot",
                 developer: "Developed by GlaceYT / https://GlaceYT.com"
             },
             selectMenu: {
@@ -102,7 +102,7 @@ module.exports = {
                 noDescription: "No description available."
             },
             footer: {
-                version: "**Version 1.4** • Prime Music Bot",
+                version: "**Version 1.4** • SNF PULSE Bot",
                 developer: "Developed by GlaceYT / https://GlaceYT.com"
             },
             buttons: {
@@ -160,7 +160,7 @@ module.exports = {
         },
         header: {
             title: "# Bot Latency",
-            botName: "**{botName}** - Prime Music Bot",
+            botName: "**{botName}** - SNF PULSE Bot",
             subtitle: "Check the bot's response time and connection status"
         },
         metrics: {
@@ -175,7 +175,7 @@ module.exports = {
             }
         },
         footer: {
-            version: "**Version 1.4** • Prime Music Bot",
+            version: "**Version 1.4** • SNF PULSE Bot",
             developer: "Developed by GlaceYT / https://GlaceYT.com"
         },
         errors: {
@@ -191,7 +191,7 @@ module.exports = {
         },
         header: {
             title: "# Bot Statistics",
-            botName: "**{botName}** - Prime Music Bot",
+            botName: "**{botName}** - SNF PULSE Bot",
             developer: "Developed by GlaceYT / https://GlaceYT.com"
         },
         botInfo: {
@@ -228,7 +228,7 @@ module.exports = {
             commands: "• Commands: {count}"
         },
         footer: {
-            version: "**Version 1.4** • Prime Music Bot",
+            version: "**Version 1.4** • SNF PULSE Bot",
             developer: "Developed by GlaceYT / https://GlaceYT.com"
         },
         errors: {
@@ -244,7 +244,7 @@ module.exports = {
         },
         header: {
             title: "# Support & Links",
-            botName: "**{botName}** - Prime Music Bot",
+            botName: "**{botName}** - SNF PULSE Bot",
             subtitle: "Get help, report issues, or connect with us!"
         },
         links: {
@@ -271,7 +271,7 @@ module.exports = {
             }
         },
         footer: {
-            version: "**Version 1.4** • Prime Music Bot",
+            version: "**Version 1.4** • SNF PULSE Bot",
             developer: "Developed by GlaceYT / https://GlaceYT.com"
         },
         buttons: {

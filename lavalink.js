@@ -75,7 +75,7 @@ class LavalinkNodeManager {
                 defaultSearchPlatform: "ytsearch",
                 restVersion: "v4",
                 autoResume: true,
-                resumeKey: "PrimeMusic",
+                resumeKey: "SNF PULSE",
                 resumeTimeout: 30000,
             });
 

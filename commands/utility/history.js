@@ -66,7 +66,7 @@ module.exports = {
 
             const footerContainer = buildPaleCard(
                 `${getEmoji('info')} Bot`,
-                [`**Version 1.5** • Prime Music Bot\nDeveloped by GlaceYT / https://GlaceYT.com`]
+                [`**Version 1.5** • SNF PULSE Bot\nDeveloped by GlaceYT / https://GlaceYT.com`]
             );
 
             const components = [historyContainer, footerContainer];

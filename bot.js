@@ -95,6 +95,46 @@ client.on("clientReady", () => {
                     console.log(nodeInfo);
                 }
             }
+
+            // Connect to default voice channels 24/7 on startup
+            setTimeout(() => {
+                for (const guild of client.guilds.cache.values()) {
+                    try {
+                        let defaultChannel;
+                        if (config.defaultVoiceChannelId) {
+                            const chan = guild.channels.cache.get(config.defaultVoiceChannelId);
+                            if (chan && chan.isVoiceBased()) defaultChannel = chan;
+                        }
+                        if (!defaultChannel) {
+                            const keywords = ['music', 'default', 'general'];
+                            for (const kw of keywords) {
+                                const chan = guild.channels.cache.find(
+                                    c => c.isVoiceBased() && c.name.toLowerCase().includes(kw)
+                                );
+                                if (chan) {
+                                    defaultChannel = chan;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!defaultChannel) {
+                            defaultChannel = guild.channels.cache.find(c => c.isVoiceBased());
+                        }
+
+                        if (defaultChannel) {
+                            console.log(`${colors.cyan}[ 24/7 ]${colors.reset} ${colors.green}Joining default voice channel ${colors.yellow}${defaultChannel.name}${colors.green} in guild ${colors.yellow}${guild.name}${colors.reset}`);
+                            client.riffy.createConnection({
+                                guildId: guild.id,
+                                voiceChannel: defaultChannel.id,
+                                textChannel: defaultChannel.id,
+                                deaf: true
+                            });
+                        }
+                    } catch (err) {
+                        console.error(`[ 24/7 ] Failed to connect on startup for guild ${guild.name}:`, err.message);
+                    }
+                }
+            }, 2000);
         }, 3000);
     } else if (client.riffy) {
     client.riffy.init(client.user.id);
@@ -182,6 +222,7 @@ client.login(config.TOKEN || process.env.TOKEN).catch((e) => {
   console.log('─'.repeat(40));
   console.log(`${colors.cyan}[ TOKEN ]${colors.reset} ${colors.red}${lang.console?.bot?.tokenAuthFailed || 'Authentication Failed ❌'}${colors.reset}`);
   console.log(`${colors.gray}${lang.console?.bot?.tokenError || 'Error: Turn On Intents or Reset New Token'}${colors.reset}`);
+  console.error("Actual login error:", e);
 });
 connectToDatabase().then(() => {
   const lang = getLangSync();
@@ -196,10 +237,20 @@ connectToDatabase().then(() => {
 });
 const express = require("express");
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 app.get('/', (req, res) => {
     const imagePath = path.join(__dirname, 'index.html');
     res.sendFile(imagePath);
+});
+
+app.get('/api/stats', (req, res) => {
+    res.json({
+        guilds: client.guilds.cache.size,
+        users: client.guilds.cache.reduce((acc, g) => acc + (g.memberCount || 0), 0),
+        uptime: process.uptime(),
+        ping: client.ws.ping,
+        playing: client.riffy ? client.riffy.players.size : 0
+    });
 });
 
 app.listen(port, () => {
@@ -210,4 +261,72 @@ app.listen(port, () => {
     console.log(`${colors.cyan}[ PORT ]${colors.reset} ${colors.yellow}http://localhost:${port}${colors.reset}`);
     console.log(`${colors.cyan}[ TIME ]${colors.reset} ${colors.gray}${new Date().toISOString().replace('T', ' ').split('.')[0]}${colors.reset}`);
     console.log(`${colors.cyan}[ USER ]${colors.reset} ${colors.yellow}GlaceYT${colors.reset}`);
+});
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+    try {
+        const botId = client.user?.id;
+        if (!botId) return;
+
+        // We only care if someone leaves a voice channel
+        if (!oldState.channelId) return;
+
+        const guild = oldState.guild;
+        const oldChannel = oldState.channel;
+        if (!oldChannel) return;
+
+        // Check if the bot is in this channel
+        const hasBot = oldChannel.members.has(botId);
+        if (!hasBot) return;
+
+        // Check if there are other human members left
+        const humanMembers = oldChannel.members.filter(m => !m.user.bot);
+
+        // If no humans left, move the bot back to the default voice channel
+        if (humanMembers.size === 0) {
+            console.log(`[ 24/7 ] Channel ${oldChannel.name} is empty. Moving back to default channel.`);
+
+            let defaultChannel;
+            if (config.defaultVoiceChannelId) {
+                const chan = guild.channels.cache.get(config.defaultVoiceChannelId);
+                if (chan && chan.isVoiceBased()) defaultChannel = chan;
+            }
+            if (!defaultChannel) {
+                const keywords = ['music', 'default', 'general'];
+                for (const kw of keywords) {
+                    const chan = guild.channels.cache.find(
+                        c => c.isVoiceBased() && c.name.toLowerCase().includes(kw)
+                    );
+                    if (chan) {
+                        defaultChannel = chan;
+                        break;
+                    }
+                }
+            }
+            if (!defaultChannel) {
+                defaultChannel = guild.channels.cache.find(c => c.isVoiceBased());
+            }
+
+            if (defaultChannel) {
+                // If the bot is already in the default channel, do nothing
+                if (oldChannel.id === defaultChannel.id) return;
+
+                const player = client.riffy.players.get(guild.id);
+                if (player) {
+                    player.queue.clear();
+                    player.stop();
+                }
+
+                client.riffy.createConnection({
+                    guildId: guild.id,
+                    voiceChannel: defaultChannel.id,
+                    textChannel: defaultChannel.id,
+                    deaf: true
+                });
+                console.log(`[ 24/7 ] Successfully moved player to default channel: ${defaultChannel.name}`);
+            }
+        }
+    } catch (err) {
+        console.error('[ 24/7 ] Error in empty channel handling:', err.message);
+    }
 });
