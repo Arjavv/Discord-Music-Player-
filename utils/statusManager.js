@@ -1,4 +1,5 @@
 const { ActivityType } = require('discord.js');
+const config = require('../config.js');
 
 class StatusManager {
     constructor(client) {
@@ -20,6 +21,11 @@ class StatusManager {
 
     async updateStatusAndVoice(guildId) {
         try {
+            if (config.showLiveActivity === false) {
+                await this.setDefaultStatus();
+                await this.clearVoiceChannelStatus(guildId);
+                return;
+            }
             const playerInfo = this.getPlayerInfo(guildId);
             
             if (playerInfo && playerInfo.playing && playerInfo.title) {

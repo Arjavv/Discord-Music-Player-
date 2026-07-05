@@ -17,6 +17,7 @@ module.exports = {
   helpBannerUrl: "https://i.ibb.co/GfTxbJfC/7-edited.png", // Optional: set a direct image URL to show an inline banner in /help
   activityName: "YouTube Music", 
   activityType: "LISTENING",  // Available activity types : LISTENING , PLAYING
+  showLiveActivity: false,  // Show current song as bot status/activity and voice channel status
   SupportServer: "https://discord.gg/VHYuyttXK",
   embedTimeout: 5,
   showProgressBar: false,  // Show progress bar in track embed
