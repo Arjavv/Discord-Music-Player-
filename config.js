@@ -15,8 +15,8 @@ module.exports = {
   customEmoji: false,  // true = use custom emoji IDs from emoji.js, false = use default unicode
   emojiTheme: "redwhite", // active custom emoji theme key in emoji.js
   helpBannerUrl: "https://i.ibb.co/GfTxbJfC/7-edited.png", // Optional: set a direct image URL to show an inline banner in /help
-  activityName: "YouTube Music", 
-  activityType: "LISTENING",  // Available activity types : LISTENING , PLAYING
+  activityName: "Spotify | YouTube", 
+  activityType: "PLAYING",  // Available activity types : LISTENING , PLAYING
   showLiveActivity: false,  // Show current song as bot status/activity and voice channel status
   SupportServer: "https://discord.gg/VHYuyttXK",
   embedTimeout: 5,
