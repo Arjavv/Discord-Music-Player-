@@ -514,9 +514,20 @@ async function initializePlayer(client) {
         try {
             const guild = client.guilds.cache.get(player.guildId);
             if (guild) {
-                const logsChannel = guild.channels.cache.find(
-                    c => c.isTextBased() && (c.name.toLowerCase() === 'cmds' || c.name.toLowerCase() === 'commands')
-                );
+                let channels = Array.from(guild.channels.cache.values());
+                if (channels.length === 0) {
+                    const fetched = await guild.channels.fetch().catch(() => null);
+                    if (fetched) channels = Array.from(fetched.values());
+                }
+
+                const findLogChannel = (chans) => {
+                    let chan = chans.find(c => c.isTextBased() && (c.name.toLowerCase() === 'cmds' || c.name.toLowerCase() === 'commands'));
+                    if (chan) return chan;
+                    chan = chans.find(c => c.isTextBased() && (c.name.toLowerCase().includes('cmds') || c.name.toLowerCase().includes('commands')));
+                    return chan;
+                };
+
+                const logsChannel = findLogChannel(channels);
                 if (logsChannel) {
                     await logsChannel.send(`🎵 **Now Playing:** \`${track.info.title}\` by \`${track.info.author || 'Unknown'}\` | Requested by: \`${requester || 'Unknown'}\``);
                 }
