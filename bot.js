@@ -238,10 +238,136 @@ connectToDatabase().then(() => {
 const express = require("express");
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Log to file interceptor
+const logFile = path.join(__dirname, 'bot.log');
+try {
+    // Keep previous log as backup before clearing to diagnose crashes
+    if (fs.existsSync(logFile)) {
+        fs.renameSync(logFile, path.join(__dirname, 'bot_old.log'));
+    }
+    fs.writeFileSync(logFile, '');
+} catch (e) {
+    console.error('Failed to initialize log file:', e);
+}
+
+function writeToLogFile(type, args) {
+    const timestamp = new Date().toISOString().replace('T', ' ').split('.')[0];
+    const message = args.map(arg => {
+        if (arg instanceof Error) {
+            return `${arg.message}\n${arg.stack}`;
+        }
+        if (typeof arg === 'object') {
+            try { return JSON.stringify(arg, null, 2); } catch { return String(arg); }
+        }
+        return String(arg);
+    }).join(' ');
+    // Strip ANSI color codes
+    const cleanMessage = message.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    try {
+        fs.appendFileSync(logFile, `[${timestamp}] [${type}] ${cleanMessage}\n`);
+    } catch (e) {
+        // Fallback to original console to avoid infinite loops if appending fails
+    }
+}
+
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+console.log = (...args) => {
+    originalLog(...args);
+    writeToLogFile('INFO', args);
+};
+console.error = (...args) => {
+    originalError(...args);
+    writeToLogFile('ERROR', args);
+};
+console.warn = (...args) => {
+    originalWarn(...args);
+    writeToLogFile('WARN', args);
+};
+
 app.get('/', (req, res) => {
     const imagePath = path.join(__dirname, 'index.html');
     res.sendFile(imagePath);
 });
+
+app.get('/logs', (req, res) => {
+    if (!fs.existsSync(logFile)) {
+        return res.status(404).send('No logs available yet.');
+    }
+    // Read the log file and return as simple scrollable HTML page with dark mode
+    try {
+        const content = fs.readFileSync(logFile, 'utf8');
+        const lines = content.split('\n').filter(Boolean);
+        const logElements = lines.map(line => {
+            let color = '#a855f7'; // purple default
+            if (line.includes('[ERROR]')) color = '#f87171'; // red
+            else if (line.includes('[WARN]')) color = '#fbbf24'; // yellow
+            else if (line.includes('[INFO]')) color = '#34d399'; // green
+            return `<div style="color: ${color}; margin-bottom: 4px; border-bottom: 1px solid #2d2d2d; padding-bottom: 4px; white-space: pre-wrap;">${escapeHtml(line)}</div>`;
+        }).join('');
+
+        res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Snf Pulse Bot Logs</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body {
+                        background-color: #111827;
+                        color: #f3f4f6;
+                        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+                        font-size: 0.875rem;
+                        padding: 1.5rem;
+                        margin: 0;
+                    }
+                    .header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-bottom: 2px solid #374151;
+                        padding-bottom: 1rem;
+                        margin-bottom: 1.5rem;
+                    }
+                    .btn {
+                        background-color: #4f46e5;
+                        color: white;
+                        border: none;
+                        padding: 0.5rem 1rem;
+                        border-radius: 0.375rem;
+                        cursor: pointer;
+                        font-weight: 600;
+                    }
+                    .btn:hover { background-color: #4338ca; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2 style="margin:0;">🌌 Snf Pulse (PiePlayer) Logs</h2>
+                    <button class="btn" onclick="window.location.reload()">Refresh Logs</button>
+                </div>
+                <div style="background-color: #1f2937; padding: 1rem; border-radius: 0.5rem; overflow-y: auto; max-height: 85vh;">
+                    ${logElements || '<div style="color:#9ca3af;">No logs written yet.</div>'}
+                </div>
+            </body>
+            </html>
+        `);
+    } catch (e) {
+        res.status(500).send(`Failed to read logs: ${e.message}`);
+    }
+});
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
 app.get('/api/stats', (req, res) => {
     res.json({

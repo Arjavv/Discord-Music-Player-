@@ -94,11 +94,10 @@ module.exports = {
 
                     try {
                         const nodeManager = getLavalinkManager();
-                        if (!nodeManager) {
+                        if (!nodeManager || !nodeManager.hasConnectedNodes()) {
                             return interaction.respond([]);
                         }
 
-                        await nodeManager.ensureNodeAvailable();
                         const resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
 
                         if (resolve && resolve.tracks && resolve.tracks.length > 0) {

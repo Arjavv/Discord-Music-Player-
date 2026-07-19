@@ -33,6 +33,13 @@ module.exports = {
       host: "de-01.strixnodes.com",
       port: 2010,
       secure: false
+    },
+    {
+      name: "Jirayu",
+      password: "youshallnotpass",
+      host: "lavalink.jirayu.net",
+      port: 443,
+      secure: true
     }
   ]
 }
