@@ -72,7 +72,7 @@ class LavalinkNodeManager {
                     const guild = this.client.guilds.cache.get(payload.d.guild_id);
                     if (guild) guild.shard.send(payload);
                 },
-                defaultSearchPlatform: "ytsearch",
+                defaultSearchPlatform: "scsearch",
                 restVersion: "v4",
                 autoResume: true,
                 resumeKey: "SNF PULSE",
