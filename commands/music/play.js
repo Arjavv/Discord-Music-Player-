@@ -98,7 +98,9 @@ module.exports = {
                             return interaction.respond([]);
                         }
 
-                        const resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
+                        const resolvePromise = client.riffy.resolve({ query, requester: interaction.user.username });
+                        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Autocomplete Timeout')), 2200));
+                        const resolve = await Promise.race([resolvePromise, timeoutPromise]);
 
                         if (resolve && resolve.tracks && resolve.tracks.length > 0) {
                             const choices = resolve.tracks.slice(0, 25).map(track => {

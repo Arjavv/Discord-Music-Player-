@@ -35,9 +35,9 @@ module.exports = {
       secure: false
     },
     {
-      name: "Jirayu",
-      password: "youshallnotpass",
-      host: "lavalink.jirayu.net",
+      name: "Millohost",
+      password: "https://discord.gg/mjS5J2K3ep",
+      host: "lava-v4.millohost.my.id",
       port: 443,
       secure: true
     }
