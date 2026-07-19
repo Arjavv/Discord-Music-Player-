@@ -237,6 +237,7 @@ connectToDatabase().then(() => {
 });
 const express = require("express");
 const app = express();
+app.use(express.json());
 const port = process.env.PORT || 3000;
 
 // Log to file interceptor
@@ -377,6 +378,79 @@ app.get('/api/stats', (req, res) => {
         ping: client.ws.ping,
         playing: client.riffy ? client.riffy.players.size : 0
     });
+});
+
+app.get('/api/players', (req, res) => {
+    if (!client.riffy) return res.json([]);
+    const players = [];
+    for (const [guildId, player] of client.riffy.players) {
+        const guild = client.guilds.cache.get(guildId);
+        players.push({
+            guildId,
+            guildName: guild ? guild.name : 'Unknown Server',
+            playing: player.playing,
+            paused: player.paused,
+            current: player.current ? {
+                title: player.current.info.title,
+                author: player.current.info.author,
+                length: player.current.info.length,
+                uri: player.current.info.uri,
+                thumbnail: player.current.info.thumbnail
+            } : null,
+            position: player.position,
+            queueLength: player.queue.length,
+            volume: player.volume
+        });
+    }
+    res.json(players);
+});
+
+app.post('/api/player/:guildId/control', async (req, res) => {
+    const { guildId } = req.params;
+    const { action, value } = req.body;
+    
+    if (!client.riffy) return res.status(500).json({ error: 'Riffy not initialized' });
+    const player = client.riffy.players.get(guildId);
+    if (!player) return res.status(404).json({ error: 'Player not found for this guild' });
+    
+    try {
+        switch (action) {
+            case 'play':
+            case 'resume':
+                player.pause(false);
+                break;
+            case 'pause':
+                player.pause(true);
+                break;
+            case 'skip':
+                player.stop();
+                break;
+            case 'stop':
+                try {
+                    const { cleanupTrackMessages } = require('./player.js');
+                    await cleanupTrackMessages(client, player);
+                } catch (_) {}
+                player.destroy();
+                break;
+            case 'volume':
+                const vol = parseInt(value);
+                if (!isNaN(vol) && vol >= 0 && vol <= 150) {
+                    player.setVolume(vol);
+                }
+                break;
+            case 'seek':
+                const pos = parseInt(value);
+                if (!isNaN(pos) && pos >= 0) {
+                    player.seek(pos);
+                }
+                break;
+            default:
+                return res.status(400).json({ error: 'Invalid action' });
+        }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.listen(port, () => {
