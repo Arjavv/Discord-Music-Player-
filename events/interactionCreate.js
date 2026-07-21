@@ -1,5 +1,5 @@
 const config = require("../config.js");
-const { InteractionType, MessageFlags } = require('discord.js');
+const { InteractionType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const path = require("path");
 const colors = require('../UI/colors/colors');
 const { getLang, getLangSync } = require('../utils/languageLoader.js');
@@ -132,10 +132,37 @@ module.exports = async (client, interaction) => {
         }
         return;
       }
+
+      const playerButtons = [
+        'loopToggle', 'skipTrack', 'stopTrack', 'togglePlayback',
+        'player_favorite', 'player_add_song', 'player_volume', 'player_save_song',
+        'player_queue', 'player_shuffle',
+        'q_prev_page', 'q_next_page', 'q_remove_song', 'q_move_song', 'q_clear',
+        'mix_playlist_shuffle', 'mix_playlist_keep'
+      ];
+      if (playerButtons.includes(interaction.customId)) {
+        try {
+          const { handlePlayerButton } = require('../player.js');
+          return await handlePlayerButton(client, interaction);
+        } catch (error) {
+          console.error('Error handling global player button:', error);
+        }
+        return;
+      }
     }
 
   
     if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === 'player_filter_select') {
+        try {
+          const { handlePlayerSelect } = require('../player.js');
+          return await handlePlayerSelect(client, interaction);
+        } catch (error) {
+          console.error('Error handling global player select menu:', error);
+        }
+        return;
+      }
+
       if (interaction.customId.startsWith('help_') || interaction.customId === 'help_category_select') {
         try {
           const deferred = await safeDeferUpdate(interaction);
@@ -162,6 +189,16 @@ module.exports = async (client, interaction) => {
     }
 
     if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('player_modal_') || interaction.customId.startsWith('q_modal_')) {
+        try {
+          const { handlePlayerModalSubmit } = require('../player.js');
+          return await handlePlayerModalSubmit(client, interaction);
+        } catch (error) {
+          console.error('Error handling global player modal submit:', error);
+        }
+        return;
+      }
+
       if (interaction.customId.startsWith('playlist_modal_')) {
         try {
           const playlistCommand = client.commands.get('playlist');

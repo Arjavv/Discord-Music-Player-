@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../../config.js');
 const SpotifyWebApi = require('spotify-web-api-node');
 const { getData, getTracks } = require('spotify-url-info')(require('node-fetch'));
@@ -374,15 +374,31 @@ module.exports = {
                 ]
             );
 
+            let components = [successContainer];
+            if (isPlaylist && addedCount > 1) {
+                const mixRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('mix_playlist_shuffle')
+                        .setLabel('Shuffle & Mix')
+                        .setEmoji('🔀')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('mix_playlist_keep')
+                        .setLabel('Keep Order')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+                successContainer.addActionRowComponents(mixRow);
+            }
+
             const message = await interaction.editReply({ 
-                components: [successContainer],
+                components: components,
                 flags: MessageFlags.IsComponentsV2,
                 fetchReply: true
             });
 
             setTimeout(() => {
                 message.delete().catch(() => {}); 
-            }, 3000);
+            }, isPlaylist ? 30000 : 5000);
 
         } catch (error) {
             const lang = await getLang(interaction.guildId).catch(() => ({ music: { play: { errors: {} } } }));

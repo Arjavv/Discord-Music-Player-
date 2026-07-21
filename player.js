@@ -24,6 +24,7 @@ const nowPlayingMessages = new Map();
 const progressUpdateIntervals = new Map();
 const guildActiveFilter = new Map();
 const guildTrackMediaCache = new Map();
+const guildQueuePage = new Map();
 const musicCard = new EnhancedMusicCard();
 const useGeneratedSongCard = config.generateSongCard !== false;
 const enableVoiceChannelIdPatch = config.enableVoiceChannelIdPatch === true;
@@ -238,21 +239,19 @@ function buildNowPlayingContainer(track, requesterName, t, progressBar, progress
     const byText = t.trackInfo?.by || 'by';
     const isPaused = playerState.paused === true;
     const loopMode = playerState.loop || 'none';
-    const isLoopOn = loopMode !== 'none';
+    const loopText = loopMode === 'track' ? 'Track' : loopMode === 'queue' ? 'Queue' : 'Off';
     const sourceName = formatSourceName(track.info?.sourceName);
     const stateLabel = isPaused ? (t.playerState?.paused || 'Paused') : (t.playerState?.playing || 'Playing');
-    const loopStateLabel = isLoopOn ? (t.playerState?.loopOn || 'Loop On') : (t.playerState?.loopOff || 'Loop Off');
-    const infoLine = `${timeIcon} ${formatDuration(track.info.length)} • ${userIcon} ${requesterName || (t.trackInfo?.unknown || 'Unknown')} • ${sourceIcon} ${sourceName}`;
-    const stateLine1 = `${isPaused ? pauseIcon : playIcon} ${stateLabel}`;
-    const stateLine2 = `${loopIcon} ${loopStateLabel}`;
-    const durationLine = `${timeIcon} ${formatDuration(track.info.length)}`;
-    const requesterLine = `${userIcon} ${requesterName || (t.trackInfo?.unknown || 'Unknown')}`;
-    const sourceLine = `${sourceIcon} ${sourceName}`;
-    const queueHint = `${queueIcon} ${playerState.queueLength || 0} ${playerState.queueLength === 1 ? 'song' : 'songs'} in queue`;
     const tryHint = buildRandomTryHint(playerState.commandMentionMap);
     const showTitleBlock = !mediaUrl;
 
-    const container = new ContainerBuilder();
+    // Hex code to decimal converter
+    const resolveColor = (hex) => {
+        if (!hex) return 0xa855f7;
+        return parseInt(hex.replace('#', ''), 16);
+    };
+    const accentColor = resolveColor(config.embedColor);
+    const container = new ContainerBuilder().setAccentColor(accentColor);
 
     if (mediaUrl) {
         const mediaGallery = new MediaGalleryBuilder().addItems(
@@ -277,17 +276,29 @@ function buildNowPlayingContainer(track, requesterName, t, progressBar, progress
 
     const showSongDetails = !mediaUrl || config.metadataTag === true;
     if (showSongDetails) {
+        let detailsText = 
+            `> **Status:** ${isPaused ? '⏸️' : '▶️'} ${stateLabel}   •   **Loop:** 🔁 ${loopText}\n` +
+            `> **Duration:** ⏱️ ${formatDuration(track.info.length)}   •   **Requester:** 👤 ${requesterName || 'Unknown'}\n` +
+            `> **Source:** 🌐 ${sourceName}   •   **Queue:** 📄 ${playerState.queueLength || 0} song${playerState.queueLength === 1 ? '' : 's'}`;
+
+        if (progressBar) {
+            detailsText += `\n\n**Playback Progress:**\n${progressBar}`;
+        }
+
         container
             .addSeparatorComponents((separator) => separator)
             .addTextDisplayComponents(
                 (textDisplay) => textDisplay.setContent(
                     `### ${infoIcon} ${t.songDetailsTitle || 'Song Details'}\n` +
-                    `${stateLine1}\n` +
-                    `${stateLine2}\n` +
-                    `${durationLine}\n` +
-                    `${requesterLine}\n` +
-                    `${sourceLine}\n` +
-                    `${queueHint}`
+                    detailsText
+                )
+            );
+    } else if (progressBar) {
+        container
+            .addSeparatorComponents((separator) => separator)
+            .addTextDisplayComponents(
+                (textDisplay) => textDisplay.setContent(
+                    `**Playback Progress:**\n${progressBar}`
                 )
             );
     }
@@ -660,7 +671,7 @@ async function initializePlayer(client) {
                 progressUpdateIntervals.set(guildId, intervalId);
             }
 
-            const collector = setupCollector(client, player, channel, message);
+            // Removed local collector as events are now globally handled
 
         } catch (error) {
             const langSync = getLangSync();
@@ -893,82 +904,276 @@ async function refreshNowPlayingPanel(client, guildId) {
     await msg.edit(editPayload).catch(() => {});
 }
 
-function setupCollector(client, player, channel, message) {
-    const filter = i => [
-        'loopToggle', 'skipTrack', 'stopTrack', 'togglePlayback',
-        'player_favorite', 'player_add_song', 'player_volume', 'player_save_song',
-        'player_queue', 'player_shuffle', 'player_filter_select', 'player_filter_clear'
-    ].includes(i.customId);
+function buildQueueContainer(player, page = 0) {
+    const queue = player.queue;
+    const totalSongs = queue.length;
+    const pageSize = 10;
+    const totalPages = Math.max(1, Math.ceil(totalSongs / pageSize));
+    
+    const currentPage = Math.min(totalPages - 1, Math.max(0, page));
+    guildQueuePage.set(player.guildId, currentPage);
 
-    const collector = message.createMessageComponentCollector({ filter, time: 300000 });
+    const startIndex = currentPage * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalSongs);
+    const visibleTracks = queue.slice(startIndex, endIndex);
+    const activeTrack = player.current?.info;
 
-    collector.on('collect', async i => {
-        const member = i.member;
-        const voiceChannel = member.voice.channel;
-        const playerChannel = player.voiceChannel;
+    const sections = [];
+    
+    if (activeTrack) {
+        sections.push(
+            `### 🎧 Now Playing\n` +
+            `**${activeTrack.title}** by *${activeTrack.author || 'Unknown Artist'}*`
+        );
+    }
 
-        if (!voiceChannel || voiceChannel.id !== playerChannel) {
-            const lang = await getLang(channel.guildId).catch(() => ({ console: { player: {} } }));
-            const t = lang.console?.player || {};
-            const vcContainer = cardFromMessage(
-                `${t.voiceChannelRequired?.title || '## 🔒 Voice Channel Required'}\n\n` +
-                `${t.voiceChannelRequired?.message || 'You need to be in the same voice channel to use the controls!'}`,
-                'Voice Channel Required'
-            );
-            const sentMessage = await channel.send({ 
-                components: [vcContainer],
-                flags: MessageFlags.IsComponentsV2
-            });
-            setTimeout(() => sentMessage.delete().catch(console.error), config.embedTimeout * 1000);
-            return;
-        }
+    if (totalSongs === 0) {
+        sections.push(`### 📄 Queue is empty\nUse the **Add** button or /play to add tracks.`);
+    } else {
+        const listText = visibleTracks.map((track, i) => {
+            const queueIndex = startIndex + i + 1;
+            const title = track.info?.title || 'Unknown Title';
+            const duration = formatDuration(track.info?.length || 0);
+            const req = track.info?.requester || 'Unknown';
+            return `\`${queueIndex}.\` **${title}** (${duration}) - *Requested by: ${req}*`;
+        }).join('\n');
 
-        if (i.customId === 'player_add_song') {
-            await i.showModal(createAddSongModal()).catch(() => {});
-            const modal = await i.awaitModalSubmit({
-                filter: (m) => m.customId === 'player_modal_addsong' && m.user.id === i.user.id,
-                time: 60000
-            }).catch(() => null);
-            if (modal) {
-                await handlePlayerModalSubmit(client, modal, player, channel);
+        sections.push(
+            `### 📄 Queue (Page ${currentPage + 1}/${totalPages} • ${totalSongs} track${totalSongs === 1 ? '' : 's'})\n` +
+            listText
+        );
+    }
+
+    const resolveColor = (hex) => {
+        if (!hex) return 0xa855f7;
+        return parseInt(hex.replace('#', ''), 16);
+    };
+    const accentColor = resolveColor(config.embedColor);
+    const container = new ContainerBuilder().setAccentColor(accentColor);
+    
+    for (const section of sections) {
+        container
+            .addSeparatorComponents((separator) => separator)
+            .addTextDisplayComponents((textDisplay) => textDisplay.setContent(section));
+    }
+
+    const prevButton = new ButtonBuilder()
+        .setCustomId('q_prev_page')
+        .setLabel('Previous')
+        .setEmoji('◀️')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage === 0);
+
+    const nextButton = new ButtonBuilder()
+        .setCustomId('q_next_page')
+        .setLabel('Next')
+        .setEmoji('▶️')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(currentPage >= totalPages - 1);
+
+    const paginationRow = new ActionRowBuilder().addComponents(prevButton, nextButton);
+    container.addActionRowComponents(paginationRow);
+
+    const removeButton = new ButtonBuilder()
+        .setCustomId('q_remove_song')
+        .setLabel('Remove')
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(totalSongs === 0);
+
+    const moveButton = new ButtonBuilder()
+        .setCustomId('q_move_song')
+        .setLabel('Move')
+        .setEmoji('🔀')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(totalSongs < 2);
+
+    const clearButton = new ButtonBuilder()
+        .setCustomId('q_clear')
+        .setLabel('Clear')
+        .setEmoji('🧹')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(totalSongs === 0);
+
+    const actionRow = new ActionRowBuilder().addComponents(removeButton, moveButton, clearButton);
+    container.addActionRowComponents(actionRow);
+
+    return container;
+}
+
+async function handlePlayerButton(client, interaction) {
+    const player = client.riffy.players.get(interaction.guildId);
+    if (!player) {
+        await interaction.reply({ content: '❌ **No active player found.**', flags: MessageFlags.Ephemeral }).catch(() => {});
+        return;
+    }
+
+    const member = interaction.member;
+    const voiceChannel = member.voice.channel;
+    const playerChannel = player.voiceChannel;
+
+    if (!voiceChannel || voiceChannel.id !== playerChannel) {
+        await interaction.reply({
+            content: '❌ **You must be in the same voice channel as the bot to use the controls.**',
+            flags: MessageFlags.Ephemeral
+        }).catch(() => {});
+        return;
+    }
+
+    const channel = client.channels.cache.get(player.textChannel) || interaction.channel;
+
+    if (interaction.customId === 'player_add_song') {
+        return await interaction.showModal(createAddSongModal()).catch(() => {});
+    }
+
+    if (interaction.customId === 'player_volume') {
+        return await interaction.showModal(createVolumeModal(player.volume)).catch(() => {});
+    }
+
+    if (interaction.customId === 'player_save_song') {
+        return await interaction.showModal(createSaveSongModal()).catch(() => {});
+    }
+
+    if (interaction.customId === 'q_remove_song') {
+        const modal = new ModalBuilder()
+            .setCustomId('q_modal_remove')
+            .setTitle('Remove Song from Queue');
+
+        const input = new TextInputBuilder()
+            .setCustomId('songIndex')
+            .setLabel('Song Number (Index)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. 3')
+            .setRequired(true)
+            .setMaxLength(5);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        return await interaction.showModal(modal).catch(() => {});
+    }
+
+    if (interaction.customId === 'q_move_song') {
+        const modal = new ModalBuilder()
+            .setCustomId('q_modal_move')
+            .setTitle('Move Song in Queue');
+
+        const fromInput = new TextInputBuilder()
+            .setCustomId('moveFrom')
+            .setLabel('Song Number to Move (Index)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. 5')
+            .setRequired(true)
+            .setMaxLength(5);
+
+        const toInput = new TextInputBuilder()
+            .setCustomId('moveTo')
+            .setLabel('New Position (Index)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. 1')
+            .setRequired(true)
+            .setMaxLength(5);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(fromInput),
+            new ActionRowBuilder().addComponents(toInput)
+        );
+        return await interaction.showModal(modal).catch(() => {});
+    }
+
+    if (interaction.customId === 'mix_playlist_shuffle') {
+        try {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+            player.queue.shuffle();
+            await refreshNowPlayingPanel(client, player.guildId);
+            
+            if (interaction.message) {
+                const disabledRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('mix_playlist_shuffle').setLabel('Shuffle & Mix').setEmoji('🔀').setStyle(ButtonStyle.Primary).setDisabled(true),
+                    new ButtonBuilder().setCustomId('mix_playlist_keep').setLabel('Keep Order').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                );
+                await interaction.message.edit({
+                    components: [
+                        interaction.message.components[0],
+                        disabledRow
+                    ]
+                }).catch(() => {});
             }
-            return;
+            await interaction.editReply({ content: '🔀 **Playlist tracks mixed and shuffled!**' }).catch(() => {});
+        } catch (error) {
+            console.error(error);
+            await interaction.editReply({ content: '⚠️ **Failed to shuffle playlist.**' }).catch(() => {});
         }
+        return;
+    }
 
-        if (i.customId === 'player_volume') {
-            await i.showModal(createVolumeModal(player.volume)).catch(() => {});
-            const modal = await i.awaitModalSubmit({
-                filter: (m) => m.customId === 'player_modal_volume' && m.user.id === i.user.id,
-                time: 60000
-            }).catch(() => null);
-            if (modal) {
-                await handlePlayerModalSubmit(client, modal, player, channel);
+    if (interaction.customId === 'mix_playlist_keep') {
+        try {
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+            if (interaction.message) {
+                const disabledRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('mix_playlist_shuffle').setLabel('Shuffle & Mix').setEmoji('🔀').setStyle(ButtonStyle.Primary).setDisabled(true),
+                    new ButtonBuilder().setCustomId('mix_playlist_keep').setLabel('Keep Order').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                );
+                await interaction.message.edit({
+                    components: [
+                        interaction.message.components[0],
+                        disabledRow
+                    ]
+                }).catch(() => {});
             }
-            return;
+            await interaction.editReply({ content: '✅ **Keeping original playlist order.**' }).catch(() => {});
+        } catch (_) {}
+        return;
+    }
+
+    const deferred = await safeDeferUpdate(interaction);
+    if (!deferred && !interaction.deferred && !interaction.replied) return;
+
+    if (interaction.customId === 'q_prev_page' || interaction.customId === 'q_next_page' || interaction.customId === 'q_clear') {
+        let page = guildQueuePage.get(player.guildId) || 0;
+        if (interaction.customId === 'q_prev_page') {
+            page = Math.max(0, page - 1);
+        } else if (interaction.customId === 'q_next_page') {
+            page = page + 1;
+        } else if (interaction.customId === 'q_clear') {
+            player.queue.clear();
+            await refreshNowPlayingPanel(client, player.guildId);
+            page = 0;
         }
+        const updatedContainer = buildQueueContainer(player, page);
+        await interaction.message.edit({
+            components: [updatedContainer],
+            flags: MessageFlags.IsComponentsV2
+        }).catch(() => {});
+        return;
+    }
 
-        if (i.customId === 'player_save_song') {
-            await i.showModal(createSaveSongModal()).catch(() => {});
-            const modal = await i.awaitModalSubmit({
-                filter: (m) => m.customId === 'player_modal_save_song' && m.user.id === i.user.id,
-                time: 60000
-            }).catch(() => null);
-            if (modal) {
-                await handlePlayerModalSubmit(client, modal, player, channel);
-            }
-            return;
-        }
+    await handleInteraction(client, interaction, player, channel);
+}
 
-        const deferred = await safeDeferUpdate(i);
-        if (!deferred && !i.deferred && !i.replied) return;
+async function handlePlayerSelect(client, interaction) {
+    const player = client.riffy.players.get(interaction.guildId);
+    if (!player) {
+        await interaction.reply({ content: '❌ **No active player found.**', flags: MessageFlags.Ephemeral }).catch(() => {});
+        return;
+    }
 
-        await handleInteraction(client, i, player, channel);
-    });
+    const member = interaction.member;
+    const voiceChannel = member.voice.channel;
+    const playerChannel = player.voiceChannel;
 
-    collector.on('end', () => {
-    });
+    if (!voiceChannel || voiceChannel.id !== playerChannel) {
+        await interaction.reply({
+            content: '❌ **You must be in the same voice channel as the bot to use the controls.**',
+            flags: MessageFlags.Ephemeral
+        }).catch(() => {});
+        return;
+    }
 
-    return collector;
+    const channel = client.channels.cache.get(player.textChannel) || interaction.channel;
+    const deferred = await safeDeferUpdate(interaction);
+    if (!deferred && !interaction.deferred && !interaction.replied) return;
+
+    await handleInteraction(client, interaction, player, channel);
 }
 
 async function handleInteraction(client, i, player, channel) {
@@ -1129,8 +1334,14 @@ async function handleInteraction(client, i, player, channel) {
     }
 }
 
-async function handlePlayerModalSubmit(client, modal, player, channel) {
+async function handlePlayerModalSubmit(client, modal) {
     await modal.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    const player = client.riffy.players.get(modal.guildId);
+    if (!player) {
+        await modal.editReply({ content: '❌ **No active player found.**' }).catch(() => {});
+        return;
+    }
+    const channel = client.channels.cache.get(player.textChannel) || modal.channel;
 
     try {
         if (modal.customId === 'player_modal_addsong') {
@@ -1221,6 +1432,50 @@ async function handlePlayerModalSubmit(client, modal, player, channel) {
             );
 
             await modal.editReply({ content: `💾 Saved current song to playlist: ${playlistName}` }).catch(() => {});
+            return;
+        }
+
+        if (modal.customId === 'q_modal_remove') {
+            const rawIndex = modal.fields.getTextInputValue('songIndex')?.trim();
+            const index = parseInt(rawIndex, 10);
+            if (isNaN(index) || index < 1 || index > player.queue.length) {
+                await modal.editReply({ content: `❌ Invalid index. Please enter a number between 1 and ${player.queue.length}.` }).catch(() => {});
+                return;
+            }
+            const removedTrack = player.queue.remove(index - 1);
+            await refreshNowPlayingPanel(client, player.guildId);
+            const page = guildQueuePage.get(player.guildId) || 0;
+            const updatedContainer = buildQueueContainer(player, page);
+            await modal.message.edit({
+                components: [updatedContainer],
+                flags: MessageFlags.IsComponentsV2
+            }).catch(() => {});
+            await modal.editReply({ content: `✅ Removed **${removedTrack.info.title}** from queue.` }).catch(() => {});
+            return;
+        }
+
+        if (modal.customId === 'q_modal_move') {
+            const rawFrom = modal.fields.getTextInputValue('moveFrom')?.trim();
+            const rawTo = modal.fields.getTextInputValue('moveTo')?.trim();
+            const fromIndex = parseInt(rawFrom, 10);
+            const toIndex = parseInt(rawTo, 10);
+
+            if (isNaN(fromIndex) || fromIndex < 1 || fromIndex > player.queue.length ||
+                isNaN(toIndex) || toIndex < 1 || toIndex > player.queue.length) {
+                await modal.editReply({ content: `❌ Invalid indices. Please enter numbers between 1 and ${player.queue.length}.` }).catch(() => {});
+                return;
+            }
+
+            player.queue.move(fromIndex - 1, toIndex - 1);
+            await refreshNowPlayingPanel(client, player.guildId);
+            const page = guildQueuePage.get(player.guildId) || 0;
+            const updatedContainer = buildQueueContainer(player, page);
+            await modal.message.edit({
+                components: [updatedContainer],
+                flags: MessageFlags.IsComponentsV2
+            }).catch(() => {});
+            await modal.editReply({ content: `✅ Moved song from position \`${fromIndex}\` to \`${toIndex}\`.` }).catch(() => {});
+            return;
         }
     } catch (error) {
         await modal.editReply({ content: '⚠️ Failed to process modal action.' }).catch(() => {});
@@ -1705,4 +1960,12 @@ async function startProgressUpdates(client, guildId, message, player, track) {
     return updateInterval;
 }
 
-module.exports = { initializePlayer, cleanupTrackMessages };
+module.exports = { 
+    initializePlayer, 
+    cleanupTrackMessages, 
+    refreshNowPlayingPanel, 
+    handlePlayerButton, 
+    handlePlayerSelect, 
+    handlePlayerModalSubmit, 
+    buildQueueContainer 
+};
