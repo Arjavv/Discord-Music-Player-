@@ -2,6 +2,7 @@ const { Riffy } = require("riffy");
 const config = require("./config.js");
 const colors = require('./UI/colors/colors');
 const axios = require('axios');
+const { MessageFlags } = require("discord.js");
 
 let getLangSync;
 try {
@@ -77,11 +78,15 @@ class LavalinkNodeManager {
                 autoResume: true,
                 resumeKey: "SNF PULSE",
                 resumeTimeout: 30000,
+                autoMigratePlayers: true,
+                migrateOnDisconnect: true,
+                migrateOnFailure: true,
             });
 
             this.setupEventListeners();
             this.startHealthMonitoring();
-            this.startConnectLoop(); 
+            this.startConnectLoop();
+            this.startPlayerLatencyOptimizer();
             this.initialized = true;
 
             const lang = getLangSync();
@@ -267,6 +272,48 @@ class LavalinkNodeManager {
             console.error(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.red}${lang.console?.lavalink?.failedToReinitialize?.replace('{message}', error.message) || `Failed to re-initialize Riffy: ${error.message}`}${colors.reset}`);
             return false;
         }
+    }
+
+    startPlayerLatencyOptimizer() {
+        setInterval(async () => {
+            try {
+                if (!this.riffy || !this.riffy.players) return;
+                
+                for (const player of this.riffy.players.values()) {
+                    if (player && player.connected && player.playing && !player.migrating) {
+                        const currentPing = player.ping || 0;
+                        if (currentPing > 450) {
+                            const bestNode = this.riffy.bestNode;
+                            if (bestNode && bestNode.connected && bestNode.name !== player.node.name) {
+                                console.warn(`${colors.cyan}[ LAVALINK ][OPTIMIZE]${colors.reset} Player in guild ${player.guildId} is experiencing high latency (${currentPing}ms). Migrating to optimal node: ${bestNode.name}...`);
+                                
+                                const channel = this.client.channels.cache.get(player.textChannel);
+                                if (channel) {
+                                    const { cardFromMessage } = require('./utils/responseHandler.js');
+                                    const optimizationCard = cardFromMessage(
+                                        `⚡ **Network Optimization Active**\n\n` +
+                                        `High network latency detected (${currentPing}ms). Migrating playback to optimal node **${bestNode.displayName || bestNode.name || 'Optimal Node'}** for streaming stability.`,
+                                        'Network Optimization'
+                                    );
+                                    channel.send({ 
+                                        components: [optimizationCard],
+                                        flags: MessageFlags.IsComponentsV2
+                                    }).catch(() => {}).then(msg => {
+                                        if (msg) setTimeout(() => msg.delete().catch(() => {}), 5000);
+                                    });
+                                }
+
+                                await player.moveTo(bestNode).catch(err => {
+                                    console.error(`[LAVALINK] Failed to migrate player due to error:`, err);
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error in player latency optimizer loop:', error);
+            }
+        }, 20000);
     }
 
     setupEventListeners() {
